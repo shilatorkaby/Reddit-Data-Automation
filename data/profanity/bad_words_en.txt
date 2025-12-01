@@ -1,0 +1,98 @@
+# ------------------------------------------------------------
+# English Profanity / Abusive / Violent Language Lexicon
+# For harmful content detection in Reddit posts
+# This file is loaded dynamically by profanity_detector.py
+# ------------------------------------------------------------
+
+# -------------------------
+# Profanity & Swear Words
+# -------------------------
+shit
+fuck
+bitch
+bastard
+asshole
+idiot
+moron
+stupid
+retard
+dumb
+
+# -------------------------
+# Violence / Physical Harm
+# -------------------------
+kill
+rape
+die
+death
+murder
+stab
+shoot
+bomb
+attack
+execute
+slaughter
+beat up
+burn
+lynch
+wipe out
+destroy them
+blow up
+assassinate
+eradicate
+hunt them
+
+# -------------------------
+# Threatening Language
+# -------------------------
+i will kill you
+you deserve to die
+should be killed
+we will attack
+you will pay
+i'm coming for you
+we will find you
+watch your back
+i will hurt you
+you can't hide
+you better run
+
+# -------------------------
+# Hate Speech / Hostility
+# -------------------------
+hate them
+i hate you
+they don't belong
+go back to your country
+you don't belong here
+get out of here
+get lost
+you are the worst
+you disgust me
+you are trash
+you are garbage
+you are filth
+worthless
+subhuman
+inhuman
+vermin
+parasite
+cockroach
+rodent
+animal
+
+# -------------------------
+# Harassment / Insults
+# -------------------------
+loser
+scumbag
+jerk
+fool
+psycho
+lunatic
+creep
+coward
+fraud
+pathetic
+clown
+liar
