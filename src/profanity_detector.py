@@ -1,6 +1,4 @@
 """
-profanity_detector.py
-
 Simple dictionary-based profanity / abusive language detector.
 Uses a dynamic bad-word list loaded from a text file.
 """
@@ -33,6 +31,7 @@ def detect_bad_words(text: str, bad_words: Set[str]) -> List[str]:
         return []
 
     text = text.lower()
+    # sting.punctuation = r"""!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"""
     for p in string.punctuation:
         text = text.replace(p, " ")
 
@@ -42,17 +41,16 @@ def detect_bad_words(text: str, bad_words: Set[str]) -> List[str]:
 
 
 def analyze_post(
-    title: Optional[str],
-    body: Optional[str],
-    bad_words: Set[str],
+        title: Optional[str],
+        body: Optional[str],
+        bad_words: Set[str],
 ) -> Tuple[bool, List[str]]:
     """
     Analyze a post (title + body) for bad words.
 
     Returns:
-        has_profanity (bool)
-        matched_words (List[str])
+        has_profanity (bool), matched_words (List[str])
     """
     text = (title or "") + " " + (body or "")
     matched = detect_bad_words(text, bad_words)
-    return bool(matched), matched
+    return bool(matched), matched  # return false if matched list is empty

@@ -1,46 +1,50 @@
 """
-moderation_client.py
-
 LLM Moderation Classifier using the OpenAI Moderation API.
 
-This module wraps the moderation API in a small helper function
-Features:
-`check_moderation_flag`, which can be used to classify text for
-hate, harassment, violence, self-harm, explicit content, etc.
+Provides:
+    - check_moderation_flag: classify text for hate, harassment, violence,
+      self-harm, explicit content, etc., using OpenAI's moderation endpoint.
 """
-
+import os
 import time
 from typing import Tuple, Dict, Optional
-from openai import OpenAI, RateLimitError
 
-client = OpenAI()
+# Module level - this runs when file is imported
+try:
+    from openai import OpenAI, RateLimitError, APIError
+    OPENAI_AVAILABLE = True
+    client = OpenAI() if os.getenv("OPENAI_API_KEY") else None
+except ImportError:
+    OPENAI_AVAILABLE = False
+    client = None
 
-# Rate limiting settings
 _last_request_time = 0.0
-_MIN_INTERVAL = 0.5  # seconds between requests
+_MIN_INTERVAL = 0.5
 _cache: Dict[str, Tuple[bool, Optional[Dict[str, float]]]] = {}
 
 
 def check_moderation_flag(expression: str) -> Tuple[bool, Optional[Dict[str, float]]]:
     """
-    Checks if the given expression is flagged for moderation.
-
+Check if text is flagged.
     Args:
         expression (str): The text expression to check.
 
     Returns:
-        tuple:
-            - flagged (bool): True if the text is flagged,
-            - flagged_categories (dict or None): flagged categories -> score,
-              or None if not flagged.
+        (flagged, flagged_categories) where:
+          - flagged: True if the text is flagged by the model.
+          - flagged_categories: mapping {category: score}, or None if not flagged.
     """
     global _last_request_time
+
+    if not OPENAI_AVAILABLE:
+        print("[WARN] OpenAI not available. Install with: pip install openai")
+        return False, None
 
     if not expression:
         return False, None
 
-    # Check cache first
-    cache_key = expression[:500]  # Use first 500 chars as key
+    # Check cache first (use first 500 chars as key)
+    cache_key = expression[:500]
     if cache_key in _cache:
         return _cache[cache_key]
 
@@ -66,9 +70,11 @@ def check_moderation_flag(expression: str) -> Tuple[bool, Optional[Dict[str, flo
 
             if flagged:
                 flagged_categories: Dict[str, float] = {}
-                for category, is_flagged in categories.model_dump().items():
+                categories_dict = categories.model_dump()
+                scores_dict = category_scores.model_dump()
+                for category, is_flagged in categories_dict.items():
                     if is_flagged:
-                        flagged_categories[category] = category_scores.model_dump()[category]
+                        flagged_categories[category] = scores_dict[category]
                 response = (True, flagged_categories)
             else:
                 response = (False, None)
@@ -81,7 +87,7 @@ def check_moderation_flag(expression: str) -> Tuple[bool, Optional[Dict[str, flo
             wait_time = 2 ** attempt  # 1s, 2s, 4s
             print(f"[WARN] Rate limit hit, waiting {wait_time}s...")
             time.sleep(wait_time)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             print(f"[ERROR] Moderation API error: {e}")
             return False, None
 

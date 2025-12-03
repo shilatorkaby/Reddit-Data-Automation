@@ -1,6 +1,4 @@
 """
-post_labeler.py
-
 Label posts using:
   - dictionary-based profanity detection
   - context-aware violence / hate risk scoring (RiskScorer)
@@ -11,9 +9,9 @@ from typing import Set
 
 import pandas as pd
 
-from src.profanity_detector import analyze_post
-from src.moderation_client import check_moderation_flag
-from src.risk_scorer import RiskScorer
+from profanity_detector import analyze_post
+from moderation_client import check_moderation_flag
+from risk_scorer import RiskScorer
 
 from config import NEWS_SUBREDDITS, NEWS_KEYWORDS
 
@@ -85,6 +83,7 @@ def label_posts(
 
     df["moderation_flagged"] = False
     df["moderation_categories"] = ""
+    df["is_news_like"] = False
 
     for i, row in df.iterrows():
         title = row.get("title")
@@ -114,7 +113,7 @@ def label_posts(
             df.at[i, "violence_type"] = risk_info["violence_type"]
             df.at[i, "violence_explanation"] = risk_info["explanation"]
 
-        # Only ask OpenAI for posts that our model thinks are somewhat risky
+        # 3) Optional OpenAI Moderation API call
         if use_moderation and risk_info["risk_score"] >= 0.8 and not news_like:
             flagged, categories = check_moderation_flag(text)
             df.at[i, "moderation_flagged"] = flagged
@@ -123,7 +122,7 @@ def label_posts(
                 df.at[i, "moderation_categories"] = cat_str
 
             # If we think it's high risk but OpenAI doesn't flag anything relevant,
-            # we can be downscale the risk.
+            # downscale the risk.
             if risk_info["risk_score"] >= 0.8 and not flagged:
                 df.at[i, "violence_risk_score"] = risk_info["risk_score"] * 0.6
 

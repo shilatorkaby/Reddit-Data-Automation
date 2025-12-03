@@ -1,8 +1,7 @@
 """
-reddit_scraper.py
-
 Reddit scraper using public JSON endpoints (no API keys or OAuth).
-Also demonstrates HTML parsing with BeautifulSoup for extra metadata.
+- Demonstrates HTML parsing with BeautifulSoup for extra metadata.
+- Includes user history enrichment (2+ months of data per user).
 """
 
 from typing import List, Dict, Optional
@@ -13,7 +12,7 @@ import requests
 import pandas as pd
 from bs4 import BeautifulSoup
 
-from src.config import (
+from config import (
     BASE_URL,
     HEADERS,
     REQUEST_TIMEOUT,
@@ -29,23 +28,24 @@ REQUEST_DELAY = 0.5  # seconds between requests
 class RedditScraper:
     """
     Simple wrapper around Reddit's public JSON and HTML endpoints.
+    Handles edge cases: deleted/suspended users, private profiles, rate limiting.
     """
 
     def __init__(
-        self,
-        base_url: str = BASE_URL,
-        headers: Dict[str, str] = HEADERS,
-        timeout: int = REQUEST_TIMEOUT,
-        max_retries: int = MAX_RETRIES,
+            self,
+            base_url: str = BASE_URL,
+            headers: Dict[str, str] = None,
+            timeout: int = REQUEST_TIMEOUT,
+            max_retries: int = MAX_RETRIES,
     ) -> None:
         self.base_url = base_url.rstrip("/")
-        self.headers = headers
+        self.headers = headers or HEADERS.copy()
         self.timeout = timeout
         self.max_retries = max_retries
         self._last_request = 0.0
 
     def _rate_limit(self):
-        """Wait between requests to avoid 429 errors."""
+        # Wait between requests to avoid 429 errors.
         elapsed = time.time() - self._last_request
         if elapsed < REQUEST_DELAY:
             sleep_time = REQUEST_DELAY - elapsed + random.uniform(0.1, 0.5)
@@ -53,7 +53,7 @@ class RedditScraper:
         self._last_request = time.time()
 
     def _get_json(self, path: str, params: Optional[Dict[str, str]] = None) -> Optional[Dict]:
-        """Make a GET request to Reddit and return parsed JSON."""
+        # Make a GET request to Reddit and return parsed JSON.
         url = f"{self.base_url}{path}"
 
         self._rate_limit()  # Always wait before request
@@ -73,6 +73,10 @@ class RedditScraper:
                     print(f"[WARN] Rate limited (429), waiting {sleep_time}s...")
                     time.sleep(sleep_time)
                     continue
+
+                if resp.status_code == 404:
+                    # Not found (deleted user, private profile, etc.)
+                    return None
 
                 if resp.status_code in (500, 502, 503, 504):
                     sleep_time = 3 * attempt
@@ -107,29 +111,7 @@ class RedditScraper:
                 time.sleep(2)
         return None
 
-    def _parse_post(self, data: Dict, query: str, subreddit: Optional[str]) -> Optional[Dict]:
-        """Extract post dictionary from Reddit JSON."""
-        post_id = data.get("id")
-        author = data.get("author")
-        created_utc = data.get("created_utc")
-
-        if not post_id or not author or created_utc is None:
-            return None
-
-        return {
-            "post_id": post_id,
-            "subreddit": data.get("subreddit") or subreddit,
-            "query": query,
-            "author": author,
-            "title": data.get("title"),
-            "selftext": data.get("selftext"),
-            "created_utc": created_utc,
-            "score": data.get("score"),
-            "num_comments": data.get("num_comments"),
-            "permalink": f"https://www.reddit.com{data.get('permalink', '')}",
-            "url": data.get("url"),
-            "html_title": None,
-        }
+    # def _parse_post(self, data: Dict, query: str, subreddit: Optional[str]) -> Optional[Dict]:
 
     def enrich_post_with_html(self, post: Dict) -> Dict:
         """Fetch HTML and extract title using BeautifulSoup."""
@@ -152,13 +134,13 @@ class RedditScraper:
         return post
 
     def search_posts(
-        self,
-        query: str,
-        subreddit: Optional[str] = None,
-        sort: str = "new",
-        time_filter: str = "month",
-        limit: int = 50,
-        enrich_html: bool = False,
+            self,
+            query: str,
+            subreddit: Optional[str] = None,
+            sort: str = "top",
+            time_filter: str = "year",
+            limit: int = 50,
+            enrich_html: bool = False,
     ) -> List[Dict]:
         """Search Reddit for posts matching a query."""
         posts: List[Dict] = []
@@ -214,11 +196,11 @@ class RedditScraper:
         return posts
 
     def collect_targeted_posts(
-        self,
-        subreddits: Optional[List[str]] = None,
-        search_terms: Optional[List[str]] = None,
-        limit_per_combo: int = 10,
-        enrich_html: bool = False,
+            self,
+            subreddits: Optional[List[str]] = None,
+            search_terms: Optional[List[str]] = None,
+            limit_per_combo: int = 10,
+            enrich_html: bool = False,
     ) -> pd.DataFrame:
         """
         Collect posts across subreddits and search terms.
@@ -263,6 +245,118 @@ class RedditScraper:
         df = pd.DataFrame(all_posts)
         print(f"[INFO] Total unique posts: {len(df)}")
         return df
+
+    def get_user_history(self, username: str, months: int = 2, max_posts: int = 500) -> Dict[str, List[Dict]]:
+        """Fetch user's 2+ months of posts/comments."""
+        if not username or username in ("[deleted]", "[removed]", "AutoModerator"):
+            return {"submissions": [], "comments": [], "error": "invalid_username"}
+
+        from datetime import datetime, timedelta
+        cutoff = (datetime.now() - timedelta(days=months * 30)).timestamp()
+        submissions, comments = [], []
+
+        # Fetch submissions
+        try:
+            after = None
+            while len(submissions) < max_posts:
+                data = self._get_json(f"/user/{username}/submitted.json",
+                                      {"limit": "100", "after": after} if after else {"limit": "100"})
+                if not data or "data" not in data:
+                    break
+                children = data["data"].get("children", [])
+                if not children:
+                    break
+                for child in children:
+                    p = child.get("data", {})
+                    if p.get("created_utc", 0) < cutoff:
+                        break
+                    post = self._parse_post(p, query="", subreddit=None)
+                    if post:
+                        submissions.append(post)
+                if children and children[-1].get("data", {}).get("created_utc", 0) < cutoff:
+                    break
+                after = data["data"].get("after")
+                if not after:
+                    break
+        except Exception as e:
+            print(f"[WARN] Error fetching u/{username} submissions: {e}")
+
+        # Fetch comments (same logic)
+        try:
+            after = None
+            while len(comments) < max_posts:
+                data = self._get_json(f"/user/{username}/comments.json",
+                                      {"limit": "100", "after": after} if after else {"limit": "100"})
+                if not data or "data" not in data:
+                    break
+                children = data["data"].get("children", [])
+                if not children:
+                    break
+                for child in children:
+                    c = child.get("data", {})
+                    if c.get("created_utc", 0) < cutoff:
+                        break
+                    comment = {
+                        "post_id": c.get("id"), "author": username, "subreddit": c.get("subreddit", ""),
+                        "title": "", "selftext": c.get("body", ""), "created_utc": c.get("created_utc"),
+                        "score": c.get("score", 0), "num_comments": 0,
+                        "permalink": f"https://www.reddit.com{c.get('permalink', '')}", "url": "", "query": ""
+                    }
+                    comments.append(comment)
+                if children and children[-1].get("data", {}).get("created_utc", 0) < cutoff:
+                    break
+                after = data["data"].get("after")
+                if not after:
+                    break
+        except Exception as e:
+            print(f"[WARN] Error fetching u/{username} comments: {e}")
+
+        print(f"[INFO] u/{username}: {len(submissions)} submissions, {len(comments)} comments")
+        return {"submissions": submissions, "comments": comments, "error": None}
+
+    def enrich_users_with_history(self, usernames: List[str], months: int = 2) -> pd.DataFrame:
+        """Fetch 2+ months history for multiple users."""
+        all_posts = []
+        for i, username in enumerate(usernames, 1):
+            print(f"[INFO] Fetching history for u/{username} ({i}/{len(usernames)})")
+            history = self.get_user_history(username, months=months)
+            if history.get("error"):
+                print(f"[WARN] Skipping u/{username}: {history['error']}")
+                continue
+            all_posts.extend(history["submissions"])
+            all_posts.extend(history["comments"])
+
+        if not all_posts:
+            print("[WARN] No user history collected.")
+            return pd.DataFrame()
+
+        df = pd.DataFrame(all_posts)
+        print(f"[INFO] Collected {len(df)} historical posts from {len(usernames)} users")
+        return df
+
+    def _parse_post(self,data: Dict, query: str, subreddit: Optional[str]) -> Optional[Dict]:
+        """Extract post dictionary from Reddit JSON."""
+        post_id = data.get("id")
+        author = data.get("author")
+        created_utc = data.get("created_utc")
+
+        if not post_id or not author or created_utc is None:
+            return None
+
+        return {
+            "post_id": post_id,
+            "subreddit": data.get("subreddit") or subreddit,
+            "query": query,
+            "author": author,
+            "title": data.get("title"),
+            "selftext": data.get("selftext"),
+            "created_utc": created_utc,
+            "score": data.get("score"),
+            "num_comments": data.get("num_comments"),
+            "permalink": f"https://www.reddit.com{data.get('permalink', '')}",
+            "url": data.get("url"),
+            "html_title": None,
+        }
 
 
 if __name__ == "__main__":

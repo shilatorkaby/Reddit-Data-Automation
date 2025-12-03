@@ -3,6 +3,18 @@
 An automated Python system for identifying and monitoring violent hate speech on Reddit. This project delivers scored
 data feeds of posts and prioritized lists of high-risk user accounts.
 
+## Table of Contents
+- [Features](#key-features)
+- [Architecture](#architecture)
+- [Installation](#installation)
+- [Risk Scoring Methodology](#risk-scoring-methodology)
+- [Output Files](#output-files)
+- [Edge Cases](#edge-cases--reliability)
+- [Testing & Validation](#testing--validation)
+- [Configuration](#configuration)
+- [Limitations & Future Work
+](#limitations--future-work)
+
 ## Objective
 
 Automatically collect and score Reddit posts discussing controversial, harmful, and violent content, providing:
@@ -77,40 +89,45 @@ python main.py
 
 # Monitor high-risk users
 python -m src.monitoring
+
+# Run tests
+python test_risk_scorer.py
+
 ```
 
 ## Methodology
 
 ### Data Collection
 
-- **Search Strategy**: Combines search terms (e.g., "kill", "death threat") with targeted subreddits (politics, news,
-  PublicFreakout)
+- **Search Strategy**: Combines search terms (e.g., "kill", "death threat") with targeted subreddits (politics, news, PublicFreakout)
 - **Source**: Reddit's public JSON API (no authentication needed)
 - **Rate Limiting**: 0.5s between requests to avoid 429 errors
 - **User History**: Collects recent post history for identified high-risk users
 
-### Risk Scoring Pipeline
+### Risk Scoring Methodology
 
-**1. Dictionary-Based Detection** (`profanity_detector.py`)
+**1. Profanity Detection** (`profanity_detector.py`)
 
-- Matches against curated lexicon of profanity and violent terms
+- Match against curated lexicon of profanity and violent terms
+- Case-insensitive normalization
 - Fast initial filtering for explicit content
+- Produces has_profanity and list of matched terms
 
 **2. Context-Aware Classification** (`risk_scorer.py`)
 
 - **Violence Type Detection**:
-    - `none` - No violent content
-    - `descriptive` - Narrative/news context
-    - `self_directed` - Self-harm language
-    - `hate_speech` - Dehumanizing language
-    - `call_to_violence` - Direct threats
+   - `none` - No violent content
+   - `descriptive` - Narrative/news context
+   - `self_directed` - Self-harm language
+   - `hate_speech` - Dehumanizing language
+   - `call_to_violence` - Direct threats
 - **Contextual Analysis**: Examines pronoun usage and sentence structure
 - **Scoring Formula**: Base score by type + bonuses for intensity signals
 - **News Filtering**: Distinguishes reporting from advocacy
 
-**3. LLM Moderation** (`moderation_client.py`)
+**3. Optional LLM Moderation** (`moderation_client.py`)
 
-- OpenAI Moderation API validation for high-risk posts (score ≥ 0.8)
+- OpenAI Moderation API validation `omni-moderation-latest` for high-risk posts (score ≥ 0.8)
 - Caching and retry logic for reliability
 - Score calibration based on API feedback
 
@@ -134,7 +151,7 @@ python -m src.monitoring
 | `raw_posts_labeled.csv`      | Posts with risk scores | + violence_risk_score, violence_type, has_profanity, moderation_flagged |
 | `posts_offensive_subset.csv` | High-risk posts only   | Posts with risk ≥ 0.6 or profanity or API flagged                       |
 | `users_risk.csv`             | User-level assessments | username, user_risk_score, high_risk_posts, explanation                 |
-| `alerts/*.json`              | Monitoring alerts      | Real-time alerts for new high-risk content                              |
+| `alerts/*.json`              | Monitoring alerts      | Timestamped alerts for new high-risk content from monitored users       |
 
 ### Risk Score Ranges
 
@@ -146,22 +163,26 @@ python -m src.monitoring
 | 0.8-1.0 | Critical     | Immediate action |
 
 ## Edge Cases & Reliability
+- Deleted users → Labeled as “deleted_user”
+- Private profiles → Labeled “private_profile”, assigned score 0
+- No post history → Assigned score 0 with explanation
+- News-like posts → Automatically filtered and scored 0
+- Rate limiting → Handled with exponential backoff and retries
+- Duplicate posts → Removed using post ID deduplication
 
-**Handled Edge Cases:**
+## Testing & Validation
+**Test Coverage:**
+- Risk scoring accuracy (violence types, score ranges)
+- Profanity detection (case sensitivity, punctuation handling)
+- Edge cases (empty text, special characters, very long text, Unicode)
+- Score consistency and determinism
+- Boundary validation (scores always 0-1)
 
-- New users with minimal history (scored based on available posts)
-- Deleted/suspended accounts (filtered out)
-- Private profiles (gracefully skipped)
-- API failures (fallback to heuristic scoring)
-- News vs advocacy (context-aware filtering)
-
-**Testing Strategy:**
-
-- Unit tests for risk scoring logic
-- Validation against known harmful content samples
-- Edge case testing (empty posts, special characters, non-English)
-- Rate limit compliance verification
-- Output validation (score ranges, data integrity)
+**Test Results:**
+- 40+ test cases covering all major functionality
+- Validates classification accuracy for different violence types
+- Ensures proper handling of edge cases and error conditions
+- Confirms score consistency and reliability
 
 ## Configuration
 

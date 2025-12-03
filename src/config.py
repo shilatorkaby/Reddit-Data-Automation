@@ -1,6 +1,4 @@
 """
-config.py
-
 Central configuration for the Reddit harmful-content collection pipeline.
 Uses Reddit's public JSON endpoints (no API key required).
 """
@@ -84,17 +82,15 @@ SEARCH_TERMS_BY_CATEGORY: Dict[str, List[str]] = {
     ],
 }
 
-# ---------------------------------------------------------------------------
 # Flattened list of search terms for simple iteration
-# ---------------------------------------------------------------------------
-ALL_SEARCH_TERMS: List[str] = []
-for _category, _terms in SEARCH_TERMS_BY_CATEGORY.items():
-    ALL_SEARCH_TERMS.extend(_terms)
+ALL_SEARCH_TERMS: List[str] = [
+    term
+    for terms in SEARCH_TERMS_BY_CATEGORY.values()
+    for term in terms
+]
 
-
 # ---------------------------------------------------------------------------
-# News subreddits- search queries and keywords for news posts.
-# News report about violence - that should be ignored (or scored as 0).
+# News-like content detection helpers
 # ---------------------------------------------------------------------------
 
 NEWS_SUBREDDITS = {"news", "worldnews"}

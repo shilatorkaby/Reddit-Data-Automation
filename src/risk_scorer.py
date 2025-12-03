@@ -1,6 +1,4 @@
 """
-risk_scorer.py
-
 Context-aware violence / hate content classifier.
 
 This module provides:
@@ -110,8 +108,7 @@ class RiskScorer:
                 "has_violence": True,
             }
 
-        # Only generic hate (e.g. "I hate this") – do NOT call this hate_speech,
-        # just treat as a weak signal in the numeric score.
+        # Only generic hate (e.g. "I hate this") – weak, not hate_speech
         if not violence_mentions and has_generic_hate:
             return {
                 "violence_type": "none",
@@ -149,18 +146,6 @@ class RiskScorer:
     def score_text(self, text: str) -> Dict[str, Any]:
         """
         Compute a risk score and explanation for a text.
-
-        Returns:
-            {
-                "risk_score": float,
-                "violence_type": str,
-                "violent_hits": int,
-                "hate_hits_strong": int,
-                "hate_hits_generic": int,
-                "all_caps_words": int,
-                "exclamations": int,
-                "explanation": str,
-            }
         """
         tokens = self._tokenize(text)
         lower = text.lower()

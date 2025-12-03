@@ -1,21 +1,17 @@
 """
-user_aggregator.py
-
 User-level risk aggregation based on labeled posts.
 
 Responsibilities:
   - Group posts by author.
   - Aggregate post-level violence risk into a user-level score.
   - Provide explanations per user.
-
-This can be extended later to include full 2-month history per user.
 """
 
 from typing import Optional
 
 import pandas as pd
 
-from src.risk_scorer import RiskScorer
+from risk_scorer import RiskScorer
 
 
 def build_user_feed_from_posts(

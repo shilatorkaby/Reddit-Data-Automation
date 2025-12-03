@@ -1,6 +1,4 @@
 """
-main.py
-
 End-to-end pipeline:
 - Collect harmful / controversial posts from Reddit (public JSON + HTML).
 - Detect profanity using a dictionary.
@@ -14,12 +12,12 @@ End-to-end pipeline:
 
 from pathlib import Path
 
-from src.reddit_scraper import RedditScraper
-from src.profanity_detector import load_bad_words
-from src.post_labeler import label_posts
-from src.risk_scorer import RiskScorer
-from src.user_aggregator import build_user_feed_from_posts
-from src.config import SEARCH_TERMS_BY_CATEGORY
+from reddit_scraper import RedditScraper
+from profanity_detector import load_bad_words
+from post_labeler import label_posts
+from risk_scorer import RiskScorer
+from user_aggregator import build_user_feed_from_posts
+from config import SEARCH_TERMS_BY_CATEGORY, TARGET_SUBREDDITS
 
 
 def main() -> None:
@@ -42,13 +40,13 @@ def main() -> None:
         for cat, terms in SEARCH_TERMS_BY_CATEGORY.items()
     }
 
-    subreddits = ["politics", "worldnews", "news", "PublicFreakout"]
+    # Use centralized config for target subreddits
     search_terms = list(grouped_queries.values())
 
     scraper = RedditScraper()
     print("Collecting posts from Reddit...")
     df_raw = scraper.collect_targeted_posts(
-        subreddits=subreddits,
+        subreddits=TARGET_SUBREDDITS,
         search_terms=search_terms,
         limit_per_combo=5,
         enrich_html=False,
@@ -79,7 +77,11 @@ def main() -> None:
 
     # 5. User-level risk feed (from posts we collected)
     print("Building user-level risk feed...")
-    users_df = build_user_feed_from_posts(df_labeled, post_risk_threshold=0.6, scorer=scorer)
+    users_df = build_user_feed_from_posts(
+        df_labeled,
+        post_risk_threshold=0.6,
+        scorer=scorer
+    )
     users_path = data_dir / "users_risk.csv"
     users_df.to_csv(users_path, index=False)
     print(f"User-level risk entries: {len(users_df)}. Saved to {users_path}")
@@ -88,6 +90,27 @@ def main() -> None:
     top_users = users_df.sort_values("user_risk_score", ascending=False).head(10)
     print("Top high-risk users (sample):")
     print(top_users[["username", "user_risk_score", "high_risk_posts", "total_posts"]])
+
+    # 6. Enrich high-risk users with 2 months of history
+    if not users_df.empty:
+        print("\n[STEP 6] Enriching high-risk users with 2 months of history...")
+        # high_risk_users = users_df[users_df["user_risk_score"] >= 0.5]["username"].tolist()[:20]  # Top 20
+        high_risk_users = users_df.head(20)["username"].tolist()
+
+        if high_risk_users:
+            print(f"[INFO] Enriching {len(high_risk_users)} users...")
+            df_enriched = scraper.enrich_users_with_history(high_risk_users, months=2)
+
+            if not df_enriched.empty:
+                print("[INFO] Labeling enriched posts...")
+                df_enriched_labeled = label_posts(df_enriched, bad_words, use_moderation=False, scorer=scorer)
+
+                # Save
+                enriched_csv = data_dir / "users_enriched_history.csv"
+                enriched_json = data_dir / "users_enriched_history.json"
+                df_enriched_labeled.to_csv(enriched_csv, index=False)
+                df_enriched_labeled.to_json(enriched_json, orient="records", indent=2)
+                print(f"[INFO] Saved {len(df_enriched_labeled)} enriched posts")
 
 
 if __name__ == "__main__":

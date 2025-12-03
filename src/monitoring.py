@@ -1,42 +1,71 @@
 """
-monitoring.py
-
 Daily Monitoring System for Flagged Users.
 
 Monitors high-risk users for new posts and generates alerts.
 
 Usage:
-    python -m src.monitoring
+    python -m monitoring
 """
 
 import json
 import time
-from pathlib import Path
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import List, Dict, Optional
 
 import pandas as pd
 
-from src.reddit_scraper import RedditScraper
-from src.risk_scorer import RiskScorer
-from src.moderation_client import check_moderation_flag
+from moderation_client import check_moderation_flag
+from reddit_scraper import RedditScraper
+from risk_scorer import RiskScorer
 
 
 class DailyMonitor:
     """Monitor flagged users for new high-risk content."""
 
     def __init__(
-        self,
-        data_dir: str = "data",
-        alert_threshold: float = 0.6,
-        check_hours: int = 48,
-    ):
+            self,
+            data_dir: str = "data",
+            alert_threshold: float = 0.6,
+            check_hours: int = 48,
+    ) -> None:
         self.data_dir = Path(data_dir)
         self.alert_threshold = alert_threshold
         self.check_hours = check_hours
         self.scraper = RedditScraper()
         self.scorer = RiskScorer()
         self.alerts: List[Dict] = []
+
+    # ------------------------------------------------------------------ #
+    # Internal helpers
+    # ------------------------------------------------------------------ #
+    def _build_post_record(
+            self,
+            *,
+            item: Dict,
+            username: str,
+            is_comment: bool,
+    ) -> Dict:
+        """
+        Normalize a Reddit submission or comment to a common post record.
+        """
+        if is_comment:
+            text = item.get("body", "")
+        else:
+            text = item.get("selftext", "")
+        return {
+            "post_id": item.get("id"),
+            "author": username,
+            "subreddit": item.get("subreddit"),
+            "title": "" if is_comment else item.get("title", ""),
+            "selftext": text,
+            "created_utc": item.get("created_utc"),
+            "permalink": f"https://www.reddit.com{item.get('permalink', '')}",
+        }
+
+    # ------------------------------------------------------------------ #
+    # Data loading / fetching
+    # ------------------------------------------------------------------ #
 
     def load_flagged_users(self, min_score: float = 0.5) -> List[str]:
         """Load high-risk users from users_risk.csv."""
@@ -50,8 +79,10 @@ class DailyMonitor:
         high_risk = df[df["user_risk_score"] >= min_score]
         high_risk = high_risk.sort_values("user_risk_score", ascending=False)
 
-        users = [u for u in high_risk["username"].tolist()
-                 if u and u not in ("[deleted]", "AutoModerator")]
+        users = [
+            u for u in high_risk["username"].tolist()
+            if u and u not in ("[deleted]", "AutoModerator")
+        ]
 
         print(f"[INFO] Loaded {len(users)} high-risk users to monitor")
         return users[:100]  # Limit to 100 users
@@ -63,41 +94,45 @@ class DailyMonitor:
 
         try:
             # Fetch submissions
-            data = self.scraper._get_json(f"/user/{username}/submitted.json", {"limit": "25"})
+            data = self.scraper._get_json(
+                f"/user/{username}/submitted.json",
+                {"limit": "25"}
+            )
             if data and "data" in data:
                 for child in data["data"].get("children", []):
                     p = child.get("data", {})
                     if p.get("created_utc", 0) >= cutoff:
-                        posts.append({
-                            "post_id": p.get("id"),
-                            "author": username,
-                            "subreddit": p.get("subreddit"),
-                            "title": p.get("title", ""),
-                            "selftext": p.get("selftext", ""),
-                            "created_utc": p.get("created_utc"),
-                            "permalink": f"https://www.reddit.com{p.get('permalink', '')}",
-                        })
-
+                        posts.append(
+                            self._build_post_record(
+                                item=p,
+                                username=username,
+                                is_comment=False,
+                            )
+                        )
             # Fetch comments
-            data = self.scraper._get_json(f"/user/{username}/comments.json", {"limit": "25"})
+            data = self.scraper._get_json(
+                f"/user/{username}/comments.json",
+                {"limit": "25"}
+            )
             if data and "data" in data:
                 for child in data["data"].get("children", []):
                     c = child.get("data", {})
                     if c.get("created_utc", 0) >= cutoff:
-                        posts.append({
-                            "post_id": c.get("id"),
-                            "author": username,
-                            "subreddit": c.get("subreddit"),
-                            "title": "",
-                            "selftext": c.get("body", ""),
-                            "created_utc": c.get("created_utc"),
-                            "permalink": f"https://www.reddit.com{c.get('permalink', '')}",
-                        })
+                        posts.append(
+                            self._build_post_record(
+                                item=c,
+                                username=username,
+                                is_comment=True,
+                            )
+                        )
         except Exception as e:
             print(f"[WARN] Error fetching u/{username}: {e}")
 
         return posts
 
+    # ------------------------------------------------------------------ #
+    # Main monitoring loop
+    # ------------------------------------------------------------------ #
     def run(self, users: List[str] = None) -> List[Dict]:
         """Run monitoring and return alerts."""
         print("=" * 50)
@@ -154,7 +189,7 @@ class DailyMonitor:
         print(f"\n[DONE] Checked {len(users)} users, {len(self.alerts)} alerts")
         return self.alerts
 
-    def save_alerts(self):
+    def save_alerts(self) -> None:
         """Save alerts to JSON file."""
         alerts_dir = self.data_dir / "alerts"
         alerts_dir.mkdir(exist_ok=True)
@@ -171,6 +206,7 @@ class DailyMonitor:
 def main():
     monitor = DailyMonitor()
     monitor.run()
+
 
 if __name__ == "__main__":
     main()
