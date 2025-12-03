@@ -75,7 +75,7 @@ python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 
 # Install dependencies
-pip install pandas requests beautifulsoup4 openai langdetect
+pip install pandas requests beautifulsoup4 openai langdetect pytest pytest-mock
 
 # Set OpenAI API key (optional)
 export OPENAI_API_KEY='your-key-here'
@@ -171,18 +171,33 @@ python test_risk_scorer.py
 - Duplicate posts → Removed using post ID deduplication
 
 ## Testing & Validation
-**Test Coverage:**
-- Risk scoring accuracy (violence types, score ranges)
-- Profanity detection (case sensitivity, punctuation handling)
-- Edge cases (empty text, special characters, very long text, Unicode)
-- Score consistency and determinism
-- Boundary validation (scores always 0-1)
+**Test types covered:**
+- **Unit tests**
+  - `test_profanity_detector.py` - lexicon loading & profanity detection
+  - `test_risk_scorer.py` – violence type classification & scoring formula
+  - `test_post_labeler.py` – end-to-end labeling of posts
+  - `test_user_aggregator.py` – user-level risk aggregation
 
-**Test Results:**
-- 40+ test cases covering all major functionality
-- Validates classification accuracy for different violence types
-- Ensures proper handling of edge cases and error conditions
-- Confirms score consistency and reliability
+- **Mocked / API-facing tests**
+  - `test_moderation_client.py` – OpenAI moderation client, caching, retries, rate limiting
+  - `test_reddit_scraper.py` – Reddit scraping logic using mocked HTTP responses
+  - `test_monitoring.py` – daily monitor loop, alert generation, and file outputs
+
+- **Integration**
+  - Pipeline-style tests that go from labeled posts → user risk feed
+
+
+### Run Tests
+
+This project uses `pytest` with a mix of unit, integration, and mocked tests.
+
+```bash
+# Run full test suite
+pytest -q
+
+# Or run a specific file
+pytest tests/test_reddit_scraper.py -q
+pytest tests/test_monitoring.py -q
 
 ## Configuration
 
