@@ -1,0 +1,15 @@
+.env
+.env.local
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+data/
+*.csv
+*.json
+!bad_words_en.txt
+.idea/
+.vscode/
+.DS_Store
