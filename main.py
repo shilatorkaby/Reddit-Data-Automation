@@ -17,7 +17,7 @@ from profanity_detector import load_bad_words
 from post_labeler import label_posts
 from risk_scorer import RiskScorer
 from user_aggregator import build_user_feed_from_posts
-from config import SEARCH_TERMS_BY_CATEGORY, TARGET_SUBREDDITS
+from config import SEARCH_TERMS_BY_CATEGORY, TARGET_SUBREDDITS, ENRICH_TOP_N_USERS
 
 
 def main() -> None:
@@ -94,11 +94,13 @@ def main() -> None:
     # 6. Enrich high-risk users with 2 months of history
     if not users_df.empty:
         print("\n[STEP 6] Enriching high-risk users with 2 months of history...")
-        # high_risk_users = users_df[users_df["user_risk_score"] >= 0.5]["username"].tolist()[:20]  # Top 20
-        high_risk_users = users_df.head(20)["username"].tolist()
+        # high_risk_users = users_df[users_df["user_risk_score"] >= 0.5]["username"].tolist()[:100]  # Top 100
+        high_risk_users = users_df.head(ENRICH_TOP_N_USERS)["username"].tolist()
 
         if high_risk_users:
             print(f"[INFO] Enriching {len(high_risk_users)} users...")
+            for idx, username in enumerate(high_risk_users, 1):
+                print(f"[PROGRESS] Enriching user {idx}/{len(high_risk_users)}: {username}")
             df_enriched = scraper.enrich_users_with_history(high_risk_users, months=2)
 
             if not df_enriched.empty:

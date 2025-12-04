@@ -111,8 +111,6 @@ class RedditScraper:
                 time.sleep(2)
         return None
 
-    # def _parse_post(self, data: Dict, query: str, subreddit: Optional[str]) -> Optional[Dict]:
-
     def enrich_post_with_html(self, post: Dict) -> Dict:
         """Fetch HTML and extract title using BeautifulSoup."""
         permalink = post.get("permalink")
@@ -334,29 +332,33 @@ class RedditScraper:
         print(f"[INFO] Collected {len(df)} historical posts from {len(usernames)} users")
         return df
 
-    def _parse_post(self,data: Dict, query: str, subreddit: Optional[str]) -> Optional[Dict]:
+    def _parse_post(self, data: Dict, query: str, subreddit: Optional[str]) -> Optional[Dict]:
         """Extract post dictionary from Reddit JSON."""
-        post_id = data.get("id")
-        author = data.get("author")
-        created_utc = data.get("created_utc")
+        try:
+            post_id = data.get("id")
+            author = data.get("author")
+            created_utc = data.get("created_utc")
 
-        if not post_id or not author or created_utc is None:
+            if not post_id or not author or created_utc is None:
+                return None
+
+            return {
+                "post_id": post_id,
+                "subreddit": data.get("subreddit") or subreddit,
+                "query": query,
+                "author": author,
+                "title": data.get("title"),
+                "selftext": data.get("selftext"),
+                "created_utc": created_utc,
+                "score": data.get("score"),
+                "num_comments": data.get("num_comments"),
+                "permalink": f"https://www.reddit.com{data.get('permalink', '')}",
+                "url": data.get("url"),
+                "html_title": None,
+            }
+        except Exception as e:
+            print(f"[ERROR] Failed to parse post: {e}")
             return None
-
-        return {
-            "post_id": post_id,
-            "subreddit": data.get("subreddit") or subreddit,
-            "query": query,
-            "author": author,
-            "title": data.get("title"),
-            "selftext": data.get("selftext"),
-            "created_utc": created_utc,
-            "score": data.get("score"),
-            "num_comments": data.get("num_comments"),
-            "permalink": f"https://www.reddit.com{data.get('permalink', '')}",
-            "url": data.get("url"),
-            "html_title": None,
-        }
 
 
 if __name__ == "__main__":

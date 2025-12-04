@@ -2,8 +2,17 @@
 Central configuration for the Reddit harmful-content collection pipeline.
 Uses Reddit's public JSON endpoints (no API key required).
 """
-
+import os
 from typing import List, Dict
+
+
+# Load environment variables from .env file if it exists
+try:
+    from dotenv import load_dotenv
+    load_dotenv()  # This loads .env file into os.environ
+except ImportError:
+    print("[WARN] python-dotenv not installed. Using default config or environment variables.")
+    # pip install python-dotenv
 
 # ---------------------------------------------------------------------------
 # HTTP / Reddit settings
@@ -100,4 +109,6 @@ NEWS_KEYWORDS = {
     "suspect", "suspected", "raid",
     "attack", "shooting", "explosion", "blast", "killing",
 }
+
+ENRICH_TOP_N_USERS = 100
 
