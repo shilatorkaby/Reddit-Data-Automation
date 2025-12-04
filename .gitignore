@@ -1,0 +1,31 @@
+# Environment variables (contains secrets!)
+.env
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Data files (optional - depends on your needs)
+data/*.csv
+data/*.json
+data/alerts/
+
+# IDE settings
+.vscode/
+.idea/
+*.swp
+
+# Test coverage
+.coverage
+htmlcov/
+
+# OS files
+.DS_Store
+Thumbs.db

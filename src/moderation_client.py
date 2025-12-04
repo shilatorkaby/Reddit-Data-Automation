@@ -12,6 +12,7 @@ from typing import Tuple, Dict, Optional
 # Module level - this runs when file is imported
 try:
     from openai import OpenAI, RateLimitError, APIError
+
     OPENAI_AVAILABLE = True
     client = OpenAI() if os.getenv("OPENAI_API_KEY") else None
 except ImportError:
@@ -21,6 +22,9 @@ except ImportError:
 _last_request_time = 0.0
 _MIN_INTERVAL = 0.5
 _cache: Dict[str, Tuple[bool, Optional[Dict[str, float]]]] = {}
+
+# Cache size limit to prevent memory issues
+MAX_CACHE_SIZE = 1000
 
 
 def check_moderation_flag(expression: str) -> Tuple[bool, Optional[Dict[str, float]]]:
@@ -35,6 +39,14 @@ Check if text is flagged.
           - flagged_categories: mapping {category: score}, or None if not flagged.
     """
     global _last_request_time
+
+    # Limit cache size
+    if len(_cache) > MAX_CACHE_SIZE:
+        # Remove oldest 20% of entries
+        remove_count = MAX_CACHE_SIZE // 5
+        keys_to_remove = list(_cache.keys())[:remove_count]
+        for key in keys_to_remove:
+            del _cache[key]
 
     if not OPENAI_AVAILABLE:
         print("[WARN] OpenAI not available. Install with: pip install openai")
